@@ -9,7 +9,8 @@
   "db:generate": "drizzle-kit generate",
   "db:migrate": "node --env-file=../.env node_modules/.bin/drizzle-kit migrate",
   "db:studio": "node --env-file=../.env node_modules/.bin/drizzle-kit studio",
-  "db:drop": "drizzle-kit drop"
+  "db:drop": "drizzle-kit drop",
+"db:seed": "node --env-file=../.env db/seed.js"
 },
   "dependencies": {
     "@fastify/websocket": "^11.0.0",
