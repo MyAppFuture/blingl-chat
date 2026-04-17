@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import pg from 'pg';
 import Redis from 'ioredis';
+import { requireAuth } from './middleware/auth.js';
 
 const { Pool } = pg;
 
@@ -53,7 +54,12 @@ app.get('/health', async (request, reply) => {
   reply.code(allOk ? 200 : 503);
   return { status: allOk ? 'ok' : 'degraded', checks };
 });
-
+// Temporary: verifies JWT auth works end-to-end. Remove after Phase 2.1 testing.
+app.get('/whoami', { preHandler: requireAuth }, async (request) => ({
+  userId: request.userId,
+  email: request.userEmail,
+  role: request.userRole,
+}));
 // Echo WebSocket — proves the WS layer works
 app.get('/ws', { websocket: true }, (socket, request) => {
   app.log.info('WebSocket client connected');
