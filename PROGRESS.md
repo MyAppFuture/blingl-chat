@@ -1,13 +1,54 @@
-# Blingl Chat — Progress Log
-
-Track where you are between sessions. Update this file at the end of every work session.
-
 ## Current Status
 
-**Current Phase:** Phase 2 complete ✅ + Phase 2.5 complete ✅
-**Current Step:** Ready to start Phase 3 — REST API, Write Operations
+**Current Phase:** Phase 2 complete ✅ + Phase 2.5 complete ✅ + Audit Pass 1 (Security) complete ✅
+**Current Step:** Audit Passes 2 (Correctness) + 3 (Performance) have findings pending. Phase 3 blocked until pagination correctness (H1+H2) fixed.
 **Last session date:** 2026-04-18
-**Next action:** Phase 3.1 — POST /conversations/:id/messages (idempotent send with client_nonce, atomic sequence_number allocation via UPDATE...RETURNING, block check, server-authoritative timestamps, update conversation's last_message_at + last_message_preview on write)
+**Next action:** Fix outstanding audit items in this order:
+  1. H1+H2: NULL last_message_at + cursor tiebreaker in /conversations (Option A: two-param cursor)
+  2. M1: Soft-deleted message tombstone handling in /conversations/:id/messages
+  3. P0 #1: pg pool config with statement_timeout
+  4. P0 #2 short-term: cap unread_count subquery at LIMIT 100
+  5. P1 #5: Redis commandTimeout + maxRetriesPerRequest + enableOfflineQueue: false
+  6. L6: redis.quit() in graceful shutdown
+  7. L4: decide /whoami fate
+  Then Phase 3.1 can begin (POST /conversations/:id/messages idempotent send).
+
+  
+### Session 5 — 2026-04-18 (late night)
+
+**Duration:** ~3 hours
+**Phase:** Audit (pre-Phase-3)
+
+**Completed:**
+- Security audit (Pass 1) — all actionable findings fixed:
+  - Postgres password moved from docker-compose.yml into .env, with ${VAR} interpolation (was silently hardcoded, .env was being ignored entirely)
+  - Ports bound to 127.0.0.1 only (was 0.0.0.0 — reachable from any network interface)
+  - Rotated Postgres password to random alphanumeric (avoided @ special char that was URL-encoding-breaking the DATABASE_URL)
+  - /health now returns bare "fail" instead of leaking driver error text; real error logged server-side via request.log.warn
+  - limit query param validated as integer in [1, 100] on both paginated endpoints (was 500ing on -5, 1.5)
+  - JWT algorithm pinned to ES256 in auth middleware (defense-in-depth vs algorithm confusion)
+  - All error-object logs switched to err.message (prevents future Redis password leakage when AUTH is added)
+  - WS message logging demoted to debug + byte count (no PII in logs when real chat content flows)
+  - Added Phase 4 TODO on /ws unauthenticated route
+  - Cleaned heredoc leak from .env.example (cat > ... << 'EOF' lines)
+- Correctness audit (Pass 2) + Performance audit (Pass 3) run but findings NOT yet fixed (see Next action list)
+- Verified two audit claims against reality:
+  - P0 #3 (OR defeats LIMIT in /conversations): auditor correct, plan shows Sort → Limit, but 0.080ms exec time means it only matters at 1000s of conversations per user. Deferred.
+  - P2 #9 (redundant message_reads_user_idx): hallucinated, index doesn't exist. Ignored.
+
+**Blockers / Issues (resolved):**
+- Graceful shutdown deadlocked when Postgres was stopped mid-query; needed `docker compose restart server` to unstick. Noted for Pass 3 failure-modes audit.
+- Initial password choice (`blinglchat@`) broke DATABASE_URL because `@` is a URL separator — rotated to alphanumeric-only.
+
+**Notes:**
+- Audit was run through Claude Code on the repo (not this chat). Good workflow — Claude Code sees files directly, reduces paste errors.
+- Two audit findings already invalid/hallucinated out of ~20 total. Always verify before acting on LLM audit output.
+- H1+H2 in Pass 2 is THE blocker for Phase 3. Fix first.
+
+**Next session I'll:**
+- Fix all 7 items in the Next action list (see above)
+- Then start Phase 3.1: POST /conversations/:id/messages
+
 
 ### Session 4 — 2026-04-18 (late evening)
 
