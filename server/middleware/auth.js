@@ -28,6 +28,7 @@ export async function requireAuth(request, reply) {
     const { payload } = await jwtVerify(token, JWKS, {
       issuer: JWT_ISSUER,
       audience: 'authenticated',
+      algorithms: ['ES256'],
     });
 
     if (!payload.sub) {

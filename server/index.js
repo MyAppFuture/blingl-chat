@@ -40,14 +40,16 @@ app.get('/health', async (request, reply) => {
     const result = await pgPool.query('SELECT 1 as ok');
     checks.postgres = result.rows[0].ok === 1 ? 'ok' : 'fail';
   } catch (err) {
-    checks.postgres = `fail: ${err.message}`;
+    checks.postgres = 'fail';
+    request.log.warn({ err: err.message }, 'health: postgres check failed');
   }
 
   try {
     const pong = await redis.ping();
     checks.redis = pong === 'PONG' ? 'ok' : 'fail';
   } catch (err) {
-    checks.redis = `fail: ${err.message}`;
+    checks.redis = 'fail';
+    request.log.warn({ err: err.message }, 'health: redis check failed');
   }
 
   const allOk = Object.values(checks).every((v) => v === 'ok');
@@ -68,7 +70,10 @@ app.get('/conversations', { preHandler: requireAuth }, async (request, reply) =>
 
   // Parse + validate query params
   const cursor = request.query.cursor ?? null;
-  const limit = Math.min(Number(request.query.limit) || 20, 100);
+  const rawLimit = Number(request.query.limit);
+  const limit = Number.isInteger(rawLimit) && rawLimit >= 1 && rawLimit <= 100
+    ? rawLimit
+    : 20;
 
   // If a cursor was provided, make sure it's a valid date
   if (cursor !== null && Number.isNaN(Date.parse(cursor))) {
@@ -131,7 +136,10 @@ app.get('/conversations/:id/messages', { preHandler: requireAuth }, async (reque
   // Parse query params
   const cursorRaw = request.query.cursor ?? null;
   const afterSequenceRaw = request.query.afterSequence ?? null;
-  const limit = Math.min(Number(request.query.limit) || 50, 100);
+  const rawLimit = Number(request.query.limit);
+  const limit = Number.isInteger(rawLimit) && rawLimit >= 1 && rawLimit <= 100
+  ? rawLimit
+  : 50;
 
   // Both cursor and afterSequence must be valid non-negative integers if provided
   const cursor = cursorRaw === null ? null : Number(cursorRaw);
@@ -245,7 +253,7 @@ app.get('/unread-counts', { preHandler: requireAuth }, async (request, reply) =>
   } catch (err) {
     // Redis failed — log and fall through to Postgres.
     // Cache is an optimization, not a dependency.
-    request.log.warn({ err }, 'redis get failed, falling through to db');
+  request.log.warn({ err: err.message }, 'redis get failed, falling through to db');
   }
 
   // Cache miss: query Postgres
@@ -281,7 +289,7 @@ app.get('/unread-counts', { preHandler: requireAuth }, async (request, reply) =>
 
   // Store in Redis with 30s TTL. Fire-and-forget — don't block the response on it.
   redis.set(cacheKey, JSON.stringify(payload), 'EX', 30).catch((err) => {
-    request.log.warn({ err }, 'redis set failed');
+  request.log.warn({ err: err.message }, 'redis set failed');
   });
 
   reply.header('x-cache', 'miss');
@@ -293,11 +301,11 @@ app.get('/ws', { websocket: true }, (socket, request) => {
   app.log.info('WebSocket client connected');
   socket.send(JSON.stringify({ type: 'hello', message: 'connected' }));
 
-  socket.on('message', (raw) => {
-    const text = raw.toString();
-    app.log.info({ text }, 'WS message received');
-    socket.send(JSON.stringify({ type: 'echo', received: text }));
-  });
+socket.on('message', (raw) => {
+  const text = raw.toString();
+  app.log.debug({ bytes: raw.length }, 'WS message received');
+  socket.send(JSON.stringify({ type: 'echo', received: text }));
+});
 
   socket.on('close', () => {
     app.log.info('WebSocket client disconnected');
