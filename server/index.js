@@ -296,6 +296,7 @@ app.get('/unread-counts', { preHandler: requireAuth }, async (request, reply) =>
   return payload;
 });
 
+// TODO: Phase 4 — require auth on WebSocket upgrade before wiring real message handlers
 // Echo WebSocket — proves the WS layer works
 app.get('/ws', { websocket: true }, (socket, request) => {
   app.log.info('WebSocket client connected');
